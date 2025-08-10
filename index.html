@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ränteberäknare för Annuitetslån</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            width: 90%;
+            max-width: 900px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        }
+
+        h1 { text-align: center; margin-bottom: 20px; }
+
+        .add-loan-btn {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            margin-right: 10px;
+            user-select: none;
+        }
+        .add-loan-btn:hover { background-color: #0056b3; }
+
+        .loan-forms .loan-form {
+            background-color: #f8f8f8;
+            padding: 16px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+        }
+
+        button.calc {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        button.calc:hover { background-color: #218838; }
+
+        #result { margin-top: 20px; }
+        #result h3 { font-size: 18px; margin-bottom: 6px; }
+
+        .accordion {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            padding: 8px;
+            width: 100%;
+            text-align: left;
+            border: none;
+            outline: none;
+            font-size: 15px;
+            border-radius: 5px;
+            user-select: none;
+            margin-bottom: 8px;
+        }
+        .accordion.active, .accordion:hover { background-color: #0056b3; }
+        .accordion:after { content: '\002B'; float: right; font-weight: bold; }
+        .accordion.active:after { content: '\2212'; }
+
+        .panel { padding: 8px 12px; display: none; overflow: hidden; background-color: #f1f1f1; border-radius: 4px; }
+
+        .section-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-top: 28px;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 6px;
+        }
+
+        label { display: block; margin-top: 10px; }
+        input[type="number"], input[type="text"] {
+            width: 100%; padding: 8px; margin-top: 6px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc;
+        }
+
+        .loan-result { background-color: #e9ecef; padding: 10px; margin-top: 12px; border-radius: 6px; }
+        .loan-result h4 { margin: 0 0 6px 0; }
+
+        .summary-line { margin: 6px 0; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Ränta & lånekostnad — Annuitetslån</h1>
+
+        <button class="add-loan-btn" onclick="addLoanForm()">Lägg till lån</button>
+        <button class="add-loan-btn" style="background-color:#dc3545" onclick="resetAll()">Återställ allt</button>
+
+        <div id="loanForms" class="loan-forms"></div>
+
+        <div class="section-title">Samlat lån</div>
+        <div id="combinedLoanForm" class="loan-form">
+            <label for="combinedLoanAmount">Lånebelopp (SEK):</label>
+            <input type="number" id="combinedLoanAmount" placeholder="Ange beloppet" min="0" />
+
+            <label for="combinedInterestRate">Effektiv ränta (%):</label>
+            <input type="number" id="combinedInterestRate" placeholder="Ange räntan" step="0.01" min="0" />
+
+            <label for="combinedLoanYears">Återbetalningstid (år):</label>
+            <input type="number" id="combinedLoanYears" placeholder="Ange antal år" min="0" />
+        </div>
+
+        <div style="margin-top:12px;">
+            <button class="calc" onclick="calculateTotalInterest()">Beräkna Ränta</button>
+        </div>
+
+        <div id="result">
+            <h3 id="totalInterest">Snitt Ränta:</h3>
+
+            <div id="summaryArea">
+                <p id="totalLoanAmount" class="summary-line"></p>
+                <p id="totalMonthlyPayment" class="summary-line"></p> <!-- TOTAL MÅNADSKOSTNAD FÖR ALLA LÅN -->
+                <p id="totalCost" class="summary-line"></p>
+                <p id="totalInterestCost" class="summary-line"></p>
+            </div>
+
+            <hr />
+
+            <h3 id="combinedResultTitle"></h3>
+            <p id="combinedTotalCost"></p>
+            <p id="combinedInterestCost"></p>
+            <p id="combinedLoanCost"></p>
+
+            <hr />
+
+            <h3 id="comparisonTitle"></h3>
+            <p id="comparisonText"></p>
+
+            <div id="individualLoansResults"></div>
+        </div>
+    </div>
+
+    <script>
+        let loanCount = 0;
+
+        // Ladda sparade lån från localStorage vid start
+        window.onload = function () {
+            const saved = localStorage.getItem('loansData');
+            if (saved) {
+                const loans = JSON.parse(saved);
+                loans.forEach(loan => addLoanForm(loan));
+            }
+        };
+
+        // Lägg till ett formulär för ett lån. Om prefill skickas, fyll i fälten.
+        function addLoanForm(prefill = null) {
+            loanCount++;
+
+            const container = document.getElementById('loanForms');
+
+            const formWrap = document.createElement('div');
+            formWrap.className = 'loan-form';
+            formWrap.id = `loanForm${loanCount}`;
+
+            const accordion = document.createElement('button');
+            accordion.className = 'accordion';
+            accordion.type = 'button';
+            accordion.textContent = `Lån ${loanCount}`;
+
+            const panel = document.createElement('div');
+            panel.className = 'panel';
+
+            panel.innerHTML = `
+                <label for="bankName${loanCount}">Banknamn:</label>
+                <input type="text" id="bankName${loanCount}" placeholder="Ange bankens namn" />
+
+                <label for="loanAmount${loanCount}">Lånebelopp (SEK):</label>
+                <input type="number" id="loanAmount${loanCount}" placeholder="Ange beloppet" min="0" />
+
+                <label for="interestRate${loanCount}">Effektiv ränta (%):</label>
+                <input type="number" id="interestRate${loanCount}" placeholder="Ange räntan" step="0.01" min="0" />
+
+                <label for="loanYears${loanCount}">Återbetalningstid (år):</label>
+                <input type="number" id="loanYears${loanCount}" placeholder="Ange antal år" min="0" />
+
+                <label for="monthlyPayment${loanCount}">Månadsbetalning (SEK, valfritt):</label>
+                <input type="number" id="monthlyPayment${loanCount}" placeholder="Fyll i om du vet, annars lämna tomt" min="0" step="0.01" />
+            `;
+
+            formWrap.appendChild(accordion);
+            formWrap.appendChild(panel);
+            container.appendChild(formWrap);
+
+            // accordion toggle
+            accordion.addEventListener('click', function() {
+                this.classList.toggle('active');
+                panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+            });
+
+            // Prefill om data finns
+            if (prefill) {
+                document.getElementById(`bankName${loanCount}`).value = prefill.bankName || '';
+                document.getElementById(`loanAmount${loanCount}`).value = prefill.loanAmount || '';
+                document.getElementById(`interestRate${loanCount}`).value = prefill.interestRate || '';
+                document.getElementById(`loanYears${loanCount}`).value = prefill.loanYears || '';
+                document.getElementById(`monthlyPayment${loanCount}`).value = prefill.monthlyPayment || '';
+            }
+
+            // Lyssna och spara automatiskt vid förändring
+            ['bankName','loanAmount','interestRate','loanYears','monthlyPayment'].forEach(field => {
+                const el = document.getElementById(`${field}${loanCount}`);
+                if (el) el.addEventListener('input', saveLoansToLocalStorage);
+            });
+
+            // spara count i case user reload? (we'll rebuild forms from saved data)
+        }
+
+        // Spara alla lån till localStorage
+        function saveLoansToLocalStorage() {
+            const loans = [];
+            for (let i = 1; i <= loanCount; i++) {
+                const form = document.getElementById(`loanForm${i}`);
+                if (!form) continue;
+                const bankName = document.getElementById(`bankName${i}`).value;
+                const loanAmount = document.getElementById(`loanAmount${i}`).value;
+                const interestRate = document.getElementById(`interestRate${i}`).value;
+                const loanYears = document.getElementById(`loanYears${i}`).value;
+                const monthlyPayment = document.getElementById(`monthlyPayment${i}`).value;
+
+                // Spara även tomma fält så vi kan återskapa formulären
+                loans.push({
+                    bankName: bankName || '',
+                    loanAmount: loanAmount || '',
+                    interestRate: interestRate || '',
+                    loanYears: loanYears || '',
+                    monthlyPayment: monthlyPayment || ''
+                });
+            }
+            localStorage.setItem('loansData', JSON.stringify(loans));
+        }
+
+        // Återställ allt
+        function resetAll() {
+            if (!confirm('Är du säker på att du vill rensa alla lån och resultat?')) return;
+            document.getElementById('loanForms').innerHTML = '';
+            loanCount = 0;
+            document.getElementById('combinedLoanAmount').value = '';
+            document.getElementById('combinedInterestRate').value = '';
+            document.getElementById('combinedLoanYears').value = '';
+            // nollställ resultatfält
+            document.getElementById('totalInterest').textContent = 'Snitt Ränta:';
+            document.getElementById('totalLoanAmount').textContent = '';
+            document.getElementById('totalMonthlyPayment').textContent = '';
+            document.getElementById('totalCost').textContent = '';
+            document.getElementById('totalInterestCost').textContent = '';
+            document.getElementById('combinedResultTitle').textContent = '';
+            document.getElementById('combinedTotalCost').textContent = '';
+            document.getElementById('combinedInterestCost').textContent = '';
+            document.getElementById('combinedLoanCost').textContent = '';
+            document.getElementById('comparisonTitle').textContent = '';
+            document.getElementById('comparisonText').textContent = '';
+            document.getElementById('individualLoansResults').innerHTML = '';
+            localStorage.removeItem('loansData');
+        }
+
+        // Räkna månadskostnad (annuitet) — returnerar månadsbelopp
+        function calculateMonthlyPayment(P, annualInterestRate, years) {
+            if (isNaN(P) || isNaN(annualInterestRate) || isNaN(years) || years <= 0) return 0;
+            if (annualInterestRate === 0) return P / (years * 12);
+            const r = annualInterestRate / 100 / 12;
+            const n = years * 12;
+            const numerator = P * r * Math.pow(1 + r, n);
+            const denominator = Math.pow(1 + r, n) - 1;
+            return numerator / denominator;
+        }
+
+        // Huvudfunktion: läs lån, räkna och visa resultat
+        function calculateTotalInterest() {
+            const loans = [];
+            // samla in lån
+            for (let i = 1; i <= loanCount; i++) {
+                const form = document.getElementById(`loanForm${i}`);
+                if (!form) continue;
+                const bankName = document.getElementById(`bankName${i}`).value.trim();
+                const loanAmount = parseFloat(document.getElementById(`loanAmount${i}`).value);
+                const interestRate = parseFloat(document.getElementById(`interestRate${i}`).value);
+                const loanYears = parseFloat(document.getElementById(`loanYears${i}`).value);
+                const monthlyInputRaw = document.getElementById(`monthlyPayment${i}`).value;
+                const monthlyInput = monthlyInputRaw !== '' ? parseFloat(monthlyInputRaw) : null;
+
+                // validering
+                if (!bankName || isNaN(loanAmount) || loanAmount <= 0 || isNaN(interestRate) || isNaN(loanYears) || loanYears <= 0) {
+                    alert(`Fyll i alla fält korrekt för lån ${i}.`);
+                    return;
+                }
+
+                loans.push({
+                    bankName,
+                    loanAmount,
+                    interestRate,
+                    loanYears,
+                    monthlyInput
+                });
+            }
+
+            if (loans.length === 0) { alert('Lägg till minst ett lån.'); return; }
+
+            // spara
+            saveLoansToLocalStorage();
+
+            // beräkningar per lån
+            let totalLoanAmount = 0;
+            let weightedInterestSum = 0;
+            let totalInterestSum = 0;
+            let totalCostSum = 0;
+            let totalMonthlySum = 0;
+
+            let individualHTML = '';
+
+            loans.forEach((loan, idx) => {
+                const P = loan.loanAmount;
+                const r = loan.interestRate;
+                const yrs = loan.loanYears;
+
+                // månadsbetalning: använd user input om given, annars beräkna
+                const monthlyCalc = (loan.monthlyInput && !isNaN(loan.monthlyInput) && loan.monthlyInput > 0)
+                    ? loan.monthlyInput
+                    : calculateMonthlyPayment(P, r, yrs);
+
+                const totalPayment = monthlyCalc * yrs * 12;
+                const totalInterest = totalPayment - P;
+
+                totalLoanAmount += P;
+                weightedInterestSum += (r * P);
+                totalInterestSum += totalInterest;
+                totalCostSum += totalPayment;
+                totalMonthlySum += monthlyCalc;
+
+                individualHTML += `
+                    <div class="loan-result">
+                        <h4>Lån ${idx+1} — ${loan.bankName}</h4>
+                        <p><strong>Belopp:</strong> ${P.toLocaleString('sv-SE')} SEK</p>
+                        <p><strong>Ränta:</strong> ${r.toFixed(2)} %</p>
+                        <p><strong>År:</strong> ${yrs} år</p>
+                        <p><strong>Månadsbetalning:</strong> ${monthlyCalc.toFixed(2)} SEK ${loan.monthlyInput ? '(angiven)' : '(beräknad)'}</p>
+                        <p><strong>Totalt att betala:</strong> ${totalPayment.toLocaleString('sv-SE', {maximumFractionDigits:2})} SEK</p>
+                        <p><strong>Totala räntekostnaden:</strong> ${totalInterest.toLocaleString('sv-SE', {maximumFractionDigits:2})} SEK</p>
+                    </div>
+                `;
+            });
+
+            // viktad snittränta
+            const weightedAverageInterest = weightedInterestSum / totalLoanAmount;
+
+            // Visa totalsummor
+            document.getElementById('totalInterest').textContent = `Viktad snitt ränta: ${weightedAverageInterest.toFixed(2)} %`;
+            document.getElementById('totalLoanAmount').textContent = `Totalt lånebelopp: ${totalLoanAmount.toLocaleString('sv-SE')} SEK`;
+            document.getElementById('totalMonthlyPayment').textContent = `Total månadskostnad (alla lån tillsammans): ${totalMonthlySum.toFixed(2)} SEK per månad`;
+            document.getElementById('totalCost').textContent = `Totalkostnad (kapital + ränta) samtliga lån: ${totalCostSum.toLocaleString('sv-SE', {maximumFractionDigits:2})} SEK`;
+            document.getElementById('totalInterestCost').textContent = `Totala räntekostnaden samtliga lån: ${totalInterestSum.toLocaleString('sv-SE', {maximumFractionDigits:2})} SEK`;
+
+            // Samlat lån (användarens inmatade samlat-lån)
+            const combinedAmount = parseFloat(document.getElementById('combinedLoanAmount').value);
+            const combinedRate = parseFloat(document.getElementById('combinedInterestRate').value);
+            const combinedYears = parseFloat(document.getElementById('combinedLoanYears').value);
+
+            if (!isNaN(combinedAmount) && combinedAmount > 0 && !isNaN(combinedRate) && !isNaN(combinedYears) && combinedYears > 0) {
+                const combinedMonthly = calculateMonthlyPayment(combinedAmount, combinedRate, combinedYears);
+                const combinedTotalPayment = combinedMonthly * combinedYears * 12;
+                const combinedInterest = combinedTotalPayment - combinedAmount;
+
+                document.getElementById('combinedResultTitle').textContent = 'Samlat lån resultat';
+                document.getElementById('combinedTotalCost').textContent = `Totalkostnad (kapital + ränta): ${combinedTotalPayment.toLocaleString('sv-SE',{maximumFractionDigits:2})} SEK`;
+                document.getElementById('combinedInterestCost').textContent = `Totala räntekostnaden: ${combinedInterest.toLocaleString('sv-SE',{maximumFractionDigits:2})} SEK`;
+                document.getElementById('combinedLoanCost').textContent = `Lånebelopp: ${combinedAmount.toLocaleString('sv-SE')} SEK — Effektiv ränta: ${combinedRate.toFixed(2)} % — År: ${combinedYears} — Månadskostnad: ${combinedMonthly.toFixed(2)} SEK`;
+
+                // jämför månadsbetalningar också
+                document.getElementById('comparisonTitle').textContent = 'Jämförelse (månadskostnad)';
+                const diffMonthly = combinedMonthly - totalMonthlySum;
+                if (Math.abs(diffMonthly) < 0.01) {
+                    document.getElementById('comparisonText').textContent = `Månadskostnaden är ungefär lika (${combinedMonthly.toFixed(2)} SEK).`;
+                } else if (diffMonthly < 0) {
+                    document.getElementById('comparisonText').textContent = `Samlat lån har lägre månadskostnad med ${Math.abs(diffMonthly).toFixed(2)} SEK per månad.`;
+                } else {
+                    document.getElementById('comparisonText').textContent = `Separata lån har lägre månadskostnad med ${Math.abs(diffMonthly).toFixed(2)} SEK per månad.`;
+                }
+
+            } else {
+                // töm samlat-lånsfält om ej ifyllt
+                document.getElementById('combinedResultTitle').textContent = '';
+                document.getElementById('combinedTotalCost').textContent = '';
+                document.getElementById('combinedInterestCost').textContent = '';
+                document.getElementById('combinedLoanCost').textContent = '';
+                document.getElementById('comparisonTitle').textContent = '';
+                document.getElementById('comparisonText').textContent = '';
+            }
+
+            // visa individuella lån
+            document.getElementById('individualLoansResults').innerHTML = individualHTML;
+
+            // se till att accordion-knappar som skapats i individualHTML får funktionalitet
+            const accs = document.querySelectorAll('#individualLoansResults .accordion');
+            accs.forEach(a => {
+                a.addEventListener('click', function() {
+                    this.classList.toggle('active');
+                    const p = this.nextElementSibling;
+                    p.style.display = (p.style.display === 'block') ? 'none' : 'block';
+                });
+            });
+        }
+    </script>
+</body>
+</html>
