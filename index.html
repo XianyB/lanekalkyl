@@ -2,10 +2,6 @@
 <html lang="sv">
 <head>
 
-    <!--Denna hämtar in manifest.json-->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#000000">
-
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Ränteberäknare för Annuitetslån</title>
@@ -426,12 +422,17 @@
                 });
             });
         }
+    </script>
+    <script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => console.log('Service Worker registered'))
+      .catch(err => console.log('Service Worker failed', err));
+  }
+</script>
+    <!--Denna hämtar in manifest.json-->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
 
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js')
-        .then(() => console.log('Service Worker registered'))
-        .catch(err => console.log('Service Worker failed', err));
-    }
-  </script>
 </body>
 </html>

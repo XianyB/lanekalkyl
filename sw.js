@@ -1,19 +1,14 @@
-self.addEventListener('install', function(event) {
+self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open('v1').then(function(cache) {
-      return cache.addAll([
-        './',
-        './index.html'
-        // lägg till dina JS- och CSS-filer här om du vill cacha dem
-      ]);
-    })
+    caches.open('v1').then(cache => cache.addAll([
+      './',
+      './index.html'
+    ]))
   );
 });
 
-self.addEventListener('fetch', function(event) {
+self.addEventListener('fetch', event => {
   event.respondWith(
-    caches.match(event.request).then(function(response) {
-      return response || fetch(event.request);
-    })
+    caches.match(event.request).then(response => response || fetch(event.request))
   );
 });
